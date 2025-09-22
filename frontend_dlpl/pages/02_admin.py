@@ -7,13 +7,14 @@ import pandas as pd
 import requests
 import streamlit as st
 from dotenv import load_dotenv
+from io import BytesIO
 
 # --- CONFIGURAÇÃO INICIAL DA PÁGINA ---
 st.set_page_config(page_title='Admin | DLPL', page_icon='🔑', layout='wide', initial_sidebar_state="expanded")
 
 # Carrega as variáveis de ambiente e define a URL da API
 load_dotenv()
-API_BASE_URL = getenv('API_URL', 'http://localhost:8000')
+API_BASE_URL = getenv('API_URL', 'http://localhost:3001')
 
 
 # --- FUNÇÕES HELPER ---
@@ -140,7 +141,7 @@ def api_request(method, endpoint, params=None, json=None, data=None):
         response.raise_for_status()
         return response.json() if response.text else {}
     except requests.exceptions.HTTPError as e:
-        error = e.response.json().get('detail', e.response.text)
+        error = e.response.json()
         st.error(f'Erro na API ({e.response.status_code}): {error}')
         return None
     except requests.exceptions.RequestException as e:
@@ -154,7 +155,7 @@ def get_semesters():
     return data.get('semesters', []) if data else []
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=600)
 def get_all_turmas():
     data = api_request('GET', '/turma/', params={'is_active': None})
     return data.get('turmas', []) if data else []
@@ -197,34 +198,45 @@ def display_login_form():
 
 def display_enrollment_manager():
     st.subheader('Filtrar Inscrições')
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
     with col1:
         nome_aluno = st.text_input('Filtrar por nome do aluno')
     with col2:
         semestres_disponiveis = ['Todos'] + get_semesters()
         semestre = st.selectbox('Filtrar por semestre', semestres_disponiveis)
     with col3:
-        page_size = st.selectbox(
-            'Itens por página', [10, 25, 50, 100], index=1
-        )
+        turmas_disponiveis = ['Todas'] + [t['name'] for t in get_all_turmas()]
+        turma = st.selectbox('Filtrar por turma', turmas_disponiveis)
+    with col4:
+        pass # TODO Filtro por escolha
 
     params = {
-        'query_nome_aluno': nome_aluno if nome_aluno else None,
+        'query_nome': nome_aluno if nome_aluno else None,
         'query_semestre': semestre if semestre != 'Todos' else None,
-        'page': 1,
-        'page_size': page_size,
+        'query_turma': turma if turma != 'Todas' else None,
     }
     data = api_request('GET', '/enrollment/', params=params)
     if data:
         df_inscricoes = pd.DataFrame(data.get('data', []))
-        st.dataframe(df_inscricoes, use_container_width=True)
-        csv = df_inscricoes.to_csv(index=False).encode('utf-8')
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            df_inscricoes.to_excel(writer, index=False, sheet_name='enrollments')
+
+            for column in df_inscricoes:
+                column_width = max(df_inscricoes[column].astype(str).map(len).max(), len(column))
+                col_idx = df_inscricoes.columns.get_loc(column)
+                writer.sheets['enrollments'].set_column(col_idx, col_idx, column_width)
+
         st.download_button(
-            'Download dos Dados (CSV)',
-            csv,
-            f'inscricoes_{nome_aluno or ""}_{semestre or ""}.csv',
-            'text/csv',
+            label='Download dos Dados em Excel',
+            data=buffer.getvalue(),
+            file_name=f'inscricoes_{nome_aluno or ""}_{semestre or ""}.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
+
+
+        st.dataframe(df_inscricoes, use_container_width=True, hide_index=True)
+
 
 
 def display_user_manager():
@@ -376,7 +388,8 @@ def display_config_manager():
             f"""**Configuração Atual:**
 - Semestre Ativo: `{config_data.get('activeSemester', 'N/D')}`
 - Início Inscrições: `{config_data.get('enrollmentStartDate', 'N/D')}`
-- Fim Inscrições: `{config_data.get('enrollmentEndDate', 'N/D')}`"""
+- Fim Inscrições: `{config_data.get('enrollmentEndDate', 'N/D')}`
+- Nota de corte: `{config_data.get('cutoffScore', 'N/D')}`"""
         )
 
     with st.form('config_form'):
@@ -384,22 +397,31 @@ def display_config_manager():
         active_semester = st.selectbox(
             'Selecione o semestre ativo', get_semesters()
         )
+
+        cutoff_note = st.number_input(
+            'Nota de corte para aprovação automática (0-10)',
+            min_value=0.0,
+            max_value=10.0,
+            step=0.25,
+            value=float(config_data.get('cutoffScore', 6.75))
+        )
         col1, col2 = st.columns(2)
         with col1:
-            start_date = st.date_input('Data de início', value=datetime.now())
-            end_date = st.date_input('Data de fim', value=datetime.now())
+            start_date = st.date_input('Data de início', value=config_data.get('enrollmentStartDate', datetime.now().date()))
+            end_date = st.date_input('Data de fim', value=config_data.get('enrollmentEndDate',  datetime.now().replace(year=datetime.now().year + 1).date()))
         with col2:
             start_time = st.time_input(
-                'Hora de início', value=datetime.now().time()
+                'Hora de início', value=config_data.get('enrollmentStartDate', datetime.now().time())
             )
             end_time = st.time_input(
-                'Hora de fim', value=datetime.now().time()
+                'Hora de fim', value=config_data.get('enrollmentEndDate', datetime.now().replace(hour=datetime.now().hour + 1).time())
             )
         if st.form_submit_button(
             'Salvar Configurações', type='primary', width='stretch'
         ):
             payload = {
                 'activeSemester': active_semester,
+                'cutoffScore': cutoff_note,
                 'enrollmentStartDate': datetime.combine(
                     start_date, start_time
                 ).isoformat(),

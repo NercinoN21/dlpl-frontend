@@ -172,7 +172,6 @@ with main_col:
     if st.session_state.is_verified:
         st.title('Finalize sua Inscrição')
 
-        # Obter cursos (se ainda não tiver)
         if not st.session_state.courses:
             with st.spinner('Buscando cursos...'):
                 try:
@@ -234,7 +233,7 @@ with main_col:
                         payload = {
                             'name': st.session_state.name, 'cpf': st.session_state.cpf,
                             'course': selected_course, 'choice': selected_choice,
-                            'turma': turma, 'semester': semester,
+                            'turma': turma, 'semester': semester, 'nota_predita': entry_info.get('NOTA_PREDITA', 'N/A'),
                         }
                         try:
                             response = requests.post(f'{API_BASE_URL}/enrollment/', json=payload)

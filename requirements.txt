@@ -37,3 +37,4 @@ tzdata==2025.2
 Unidecode==1.4.0
 urllib3==2.5.0
 watchdog==6.0.0
+xlsxwriter==3.2.5
