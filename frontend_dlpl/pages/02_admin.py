@@ -208,12 +208,14 @@ def display_enrollment_manager():
         turmas_disponiveis = ['Todas'] + [t['name'] for t in get_all_turmas()]
         turma = st.selectbox('Filtrar por turma', turmas_disponiveis)
     with col4:
-        pass # TODO Filtro por escolha
+        escolhas_disponiveis = ['Todos', 'Cursar disciplina', 'Dispensa de disciplina']
+        escolha = st.selectbox('Filtrar por escolha', escolhas_disponiveis)
 
     params = {
         'query_nome': nome_aluno if nome_aluno else None,
         'query_semestre': semestre if semestre != 'Todos' else None,
         'query_turma': turma if turma != 'Todas' else None,
+        'query_escolha': escolha if escolha != 'Todos' else None,
     }
     data = api_request('GET', '/enrollment/', params=params)
     if data:
