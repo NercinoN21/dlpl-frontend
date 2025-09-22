@@ -142,7 +142,7 @@ with main_col:
             st.header('Passo 1: Verificação de Dados')
             name = st.text_input('Nome Completo', placeholder='Digite seu nome completo')
             cpf = st.text_input('CPF', placeholder='Exemplo: 111.111.111-11')
-            submit_button = st.form_submit_button(label='Verificar', use_container_width=True)
+            submit_button = st.form_submit_button(label='Verificar',width='stretch')
 
         if submit_button:
             if not name or not cpf:
@@ -223,7 +223,7 @@ with main_col:
             turma = st.selectbox('Turma', [t['name'] for t in st.session_state.get('turmas', [])])
             semester = st.selectbox('Semestre', st.session_state.get('semestre', []), disabled=True)
 
-            submit_enrollment = st.form_submit_button('Finalizar Inscrição', use_container_width=True)
+            submit_enrollment = st.form_submit_button('Finalizar Inscrição', width='stretch')
 
             if submit_enrollment:
                 if not all([turma, semester, selected_choice]):

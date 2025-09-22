@@ -237,7 +237,7 @@ def display_enrollment_manager():
         )
 
 
-        st.dataframe(df_inscricoes, use_container_width=True, hide_index=True)
+        st.dataframe(df_inscricoes, width='stretch', hide_index=True)
 
 
 
@@ -268,43 +268,45 @@ def display_user_manager():
     data = api_request('GET', '/users/', params={'is_active': None})
     if data:
         df_users = pd.DataFrame(data.get('users', []))
-        st.info(
-            '💡 Edite o status de "ativo" ou "admin" diretamente na tabela.'
+        st.info('💡 Edite o status de "ativo" ou "admin" diretamente na tabela.')
+        edited_data = st.data_editor(
+            df_users,
+            width='stretch',
+            disabled=['name'],
+            key='user_editor', # A unique key for the widget
         )
-        st.session_state.setdefault('original_users_df', df_users.copy())
 
-        edited_df = st.data_editor(
-            df_users, use_container_width=True, disabled=['name']
-        )
-        if (
-            st.session_state.original_users_df
-            and not st.session_state.original_users_df.equals(edited_df)
-        ):
-            diff = st.session_state.original_users_df.compare(
-                edited_df, align_axis=0
-            ).dropna()
-            for idx in diff.index.get_level_values(0).unique():
-                user_name = edited_df.loc[idx, 'name']
-                if 'is_active' in diff.columns.get_level_values(1):
-                    new_status = edited_df.loc[idx, 'is_active']
+        # Use Streamlit's built-in change detection
+        if st.session_state['user_editor']['edited_rows']:
+            # Get the dictionary of changes from session state
+            edited_rows = st.session_state['user_editor']['edited_rows']
+
+            for idx, updates in edited_rows.items():
+                user_name = edited_data.loc[idx, 'name']
+
+                # Check if 'is_active' was updated
+                if 'is_active' in updates:
+                    new_status = updates['is_active']
                     api_request(
                         'PUT',
                         '/users/update-active',
-                        data={
-                            'name': user_name,
-                            'is_active': bool(new_status),
-                        },
+                        data={'name': user_name, 'is_active': bool(new_status)},
                     )
-                elif 'admin' in diff.columns.get_level_values(1):
-                    new_status = edited_df.loc[idx, 'admin']
+
+                # Check if 'admin' was updated
+                if 'admin' in updates:
+                    new_status = updates['admin']
                     api_request(
                         'PUT',
                         '/users/update-admin',
                         data={'name': user_name, 'admin': bool(new_status)},
                     )
-            st.session_state.original_users_df = edited_df.copy()
+
+            # Display a success message and then re-run to refresh the data
             st.success('Alterações salvas.')
             st.rerun()
+    else:
+        st.warning('Nenhum usuário encontrado.')
 
 
 def display_class_manager():
@@ -380,7 +382,7 @@ def display_class_manager():
 
     st.subheader('Lista de Turmas Cadastradas')
     if turmas := get_all_turmas():
-        st.dataframe(pd.DataFrame(turmas), use_container_width=True)
+        st.dataframe(pd.DataFrame(turmas), width='stretch')
 
 
 def display_config_manager():
